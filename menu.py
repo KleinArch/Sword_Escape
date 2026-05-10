@@ -8,14 +8,15 @@ janela.set_title("Jogo")
 
 mouse=janela.get_mouse()
 
-button_Play= Sprite("Play.png")
-button_Sair= Sprite("Sair.png")
+button_Play= Sprite("PNG\Play.png")
+button_Sair= Sprite("PNG\Sair.png")
+background_menu = Sprite("PNG\Abackground.png")
 
-button_Play.x = janela.width/2 -100
-button_Sair.x = janela.width/2 -100
+button_Play.x = janela.width/2 - button_Play.width/2
+button_Sair.x = janela.width/2 - button_Sair.width/2
 
-button_Play.y = 150
-button_Sair.y = 450
+button_Play.y = 200
+button_Sair.y = 375
 
 #GameLoop
 while True:
@@ -25,7 +26,7 @@ while True:
     if(mouse.is_over_object(button_Sair) and mouse.is_button_pressed(1)):
       break
 
-    janela.set_background_color("blue")
+    background_menu.draw()
 
     button_Play.draw()
     button_Sair.draw()
