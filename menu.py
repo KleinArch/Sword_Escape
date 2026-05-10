@@ -8,9 +8,9 @@ janela.set_title("Jogo")
 
 mouse=janela.get_mouse()
 
-button_Play= Sprite("PNG\Play.png")
-button_Sair= Sprite("PNG\Sair.png")
-background_menu = Sprite("PNG\Abackground.png")
+button_Play= Sprite("PNG/Play.png")
+button_Sair= Sprite("PNG/Sair.png")
+background_menu = Sprite("PNG/Abackground.png")
 
 button_Play.x = janela.width/2 - button_Play.width/2
 button_Sair.x = janela.width/2 - button_Sair.width/2
