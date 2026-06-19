@@ -2,6 +2,7 @@ from PPlay.window import *
 from PPlay.sprite import *
 from PPlay.mouse import *
 from play import *
+from PPlay.window import Window
 
 janela = Window(1000,600)
 janela.set_title("Jogo")
