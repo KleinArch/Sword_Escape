@@ -40,6 +40,9 @@ def criar_lista_poc(vec):
         poc_forca = Sprite("PNG/poc_forca.png")
         poc_lista.append(poc_forca)
 
+    return poc_lista  # CORRIGIDO: faltava este return
+
+
 def celulas_livres(m):
     livres = []
     for linha_idx, linha in enumerate(m):
@@ -61,13 +64,13 @@ def criar_chefe(m, numero_sala):
     # Determina o arquivo do Boss com base na ordem das salas
     # Sala 1 -> boss_1 | Sala 2 -> boss_2 | Sala 3 -> boss_3
     if numero_sala == 1:
-        chefe_sprite = "PNG/Boss_1.png"  # Substitua pelo nome correto do seu arquivo do boss_1
+        chefe_sprite = "PNG/Boss_1.png"
         vida_chefe = 3
     elif numero_sala == 2:
-        chefe_sprite = "PNG/Boss_2.png"  # Substitua pelo nome correto do seu arquivo do boss_2
+        chefe_sprite = "PNG/Boss_2.png"
         vida_chefe = 4                   # Boss 2 um pouco mais forte
     else:
-        chefe_sprite = "PNG/Boss_3.png"  # Substitua pelo nome correto do seu arquivo do boss_3
+        chefe_sprite = "PNG/Boss_3.png"
         vida_chefe = 5                   # Boss final com mais vida
 
     chefe = Sprite(chefe_sprite)
@@ -85,3 +88,80 @@ def gerar_inimigos_para_sala(m, quantidade=3):
     qtd = min(quantidade, len(livres))
     escolhidas = random.sample(livres, qtd)
     return [criar_inimigo(l, c) for l, c in escolhidas]
+
+
+# --- Projéteis ---
+PROJETIL_VELOCIDADE = 250
+PROJETIL_TAMANHO = 16
+INTERVALO_TIRO = 2.0  # segundos entre cada tiro do chefe
+
+projeteis = []  # lista global de projéteis ativos
+
+
+def criar_projetil(x, y, dir_x, dir_y):
+    """Cria uma bola de fogo na posição do chefe com direção normalizada (dir_x, dir_y)."""
+    proj = Sprite("PNG/fireball.png")
+    proj.width = PROJETIL_TAMANHO
+    proj.height = PROJETIL_TAMANHO
+    proj.x = x
+    proj.y = y
+    proj.vel_x = dir_x * PROJETIL_VELOCIDADE
+    proj.vel_y = dir_y * PROJETIL_VELOCIDADE
+    return proj
+
+
+def atualizar_chefe(chefe, delta):
+    """Move o chefe em direção ao jogador."""
+    cx = personagem.x + personagem.width / 2
+    cy = personagem.y + personagem.height / 2
+    bx = chefe.x + chefe.width / 2
+    by = chefe.y + chefe.height / 2
+
+    dx = cx - bx
+    dy = cy - by
+    dist = max((dx**2 + dy**2) ** 0.5, 1)
+
+    vel_chefe = 80  # pixels por segundo
+
+    chefe.x += (dx / dist) * vel_chefe * delta
+    chefe.y += (dy / dist) * vel_chefe * delta
+
+    # Mantém dentro dos limites da janela (respeitando as paredes)
+    chefe.x = max(config.TAMANHO_TILE, min(chefe.x, config.janela.width - chefe.width - config.TAMANHO_TILE))
+    chefe.y = max(config.TAMANHO_TILE, min(chefe.y, config.janela.height - chefe.height - config.TAMANHO_TILE))
+
+
+def atualizar_projeteis(delta):
+    """Move os projéteis, faz ricochete nas paredes e detecta colisão com o jogador.
+    Retorna True se algum projétil acertou o jogador."""
+    global projeteis
+
+    MIN_X = config.TAMANHO_TILE
+    MAX_X = config.janela.width - config.TAMANHO_TILE - PROJETIL_TAMANHO
+    MIN_Y = config.TAMANHO_TILE
+    MAX_Y = config.janela.height - config.TAMANHO_TILE - PROJETIL_TAMANHO
+
+    acertou_jogador = False
+    ativos = []
+
+    for proj in projeteis:
+        proj.x += proj.vel_x * delta
+        proj.y += proj.vel_y * delta
+
+        # Ricochete nas paredes
+        if proj.x <= MIN_X or proj.x >= MAX_X:
+            proj.vel_x *= -1
+            proj.x = max(MIN_X, min(proj.x, MAX_X))
+
+        if proj.y <= MIN_Y or proj.y >= MAX_Y:
+            proj.vel_y *= -1
+            proj.y = max(MIN_Y, min(proj.y, MAX_Y))
+
+        # Colisão com o jogador
+        if proj.collided(personagem):
+            acertou_jogador = True
+        else:
+            ativos.append(proj)
+
+    projeteis = ativos
+    return acertou_jogador

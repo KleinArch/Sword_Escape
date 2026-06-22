@@ -1,8 +1,164 @@
-import config
+import random
 import maps
-import entities
-from save import writeFile
-from PPlay.sound import Sound  # Importa a classe de som do PPlay
+import config
+from save import writeFile, pocaoLista
+from PPlay.sprite import Sprite
+from PPlay.sound import Sound
+
+# --- Sprites Principais e de Cenário ---
+personagem = Sprite("PNG/player.png")
+personagem.x = config.janela.width / 2 - personagem.width / 2
+personagem.y = config.janela.height / 2 - personagem.height / 2
+
+floor = Sprite("PNG/Brickwall.png")
+floor.width = config.TAMANHO_TILE
+floor.height = config.TAMANHO_TILE
+
+porta_sprite = Sprite("PNG/preto.png")
+porta_sprite.width = config.TAMANHO_TILE
+porta_sprite.height = config.TAMANHO_TILE
+
+espada = Sprite("PNG/sword_player.png")
+ESPADA_W = espada.width
+ESPADA_H = espada.height
+
+vec = pocaoLista()
+
+
+def criar_lista_poc(vec):
+    poc_lista = []
+
+    if vec == []:
+        return poc_lista
+
+    if len(vec) == 1:
+        poc_v = Sprite("PNG/poc_veloc.png")
+        poc_lista.append(poc_v)
+    elif len(vec) == 2:
+        poc_cura = Sprite("PNG/poc_cura.png")
+        poc_lista.append(poc_cura)
+    elif len(vec) == 3:
+        poc_forca = Sprite("PNG/poc_forca.png")
+        poc_lista.append(poc_forca)
+
+    return poc_lista
+
+
+def celulas_livres(m):
+    livres = []
+    for linha_idx, linha in enumerate(m):
+        for col_idx, tile in enumerate(linha):
+            if tile == 0:
+                livres.append((linha_idx, col_idx))
+    return livres
+
+
+def criar_inimigo(linha_idx, col_idx):
+    inimigo = Sprite("PNG/IniBase_1.png")
+    inimigo.x = col_idx * config.TAMANHO_TILE
+    inimigo.y = linha_idx * config.TAMANHO_TILE
+    inimigo.vida = 1
+    inimigo.eh_chefe = False
+    return inimigo
+
+
+def criar_chefe(m, numero_sala):
+    if numero_sala == 1:
+        chefe_sprite = "PNG/Boss_1.png"
+        vida_chefe = 3
+    elif numero_sala == 2:
+        chefe_sprite = "PNG/Boss_2.png"
+        vida_chefe = 4
+    else:
+        chefe_sprite = "PNG/Boss_3.png"
+        vida_chefe = 5
+
+    chefe = Sprite(chefe_sprite)
+    livres = celulas_livres(m)
+    centro = livres[len(livres) // 2]
+    chefe.x = centro[1] * config.TAMANHO_TILE
+    chefe.y = centro[0] * config.TAMANHO_TILE
+    chefe.vida = vida_chefe
+    chefe.eh_chefe = True
+    return chefe
+
+
+def gerar_inimigos_para_sala(m, quantidade=3):
+    livres = celulas_livres(m)
+    qtd = min(quantidade, len(livres))
+    escolhidas = random.sample(livres, qtd)
+    return [criar_inimigo(l, c) for l, c in escolhidas]
+
+
+# --- Projéteis ---
+PROJETIL_VELOCIDADE = 250
+PROJETIL_TAMANHO = 16
+INTERVALO_TIRO = 2.0
+
+projeteis = []
+
+
+def criar_projetil(x, y, dir_x, dir_y):
+    proj = Sprite("PNG/fireball.png")
+    proj.width = PROJETIL_TAMANHO
+    proj.height = PROJETIL_TAMANHO
+    proj.x = x
+    proj.y = y
+    proj.vel_x = dir_x * PROJETIL_VELOCIDADE
+    proj.vel_y = dir_y * PROJETIL_VELOCIDADE
+    return proj
+
+
+def atualizar_chefe(chefe, delta):
+    cx = personagem.x + personagem.width / 2
+    cy = personagem.y + personagem.height / 2
+    bx = chefe.x + chefe.width / 2
+    by = chefe.y + chefe.height / 2
+
+    dx = cx - bx
+    dy = cy - by
+    dist = max((dx**2 + dy**2) ** 0.5, 1)
+
+    vel_chefe = 80
+
+    chefe.x += (dx / dist) * vel_chefe * delta
+    chefe.y += (dy / dist) * vel_chefe * delta
+
+    chefe.x = max(config.TAMANHO_TILE, min(chefe.x, config.janela.width - chefe.width - config.TAMANHO_TILE))
+    chefe.y = max(config.TAMANHO_TILE, min(chefe.y, config.janela.height - chefe.height - config.TAMANHO_TILE))
+
+
+def atualizar_projeteis(delta):
+    global projeteis
+
+    MIN_X = config.TAMANHO_TILE
+    MAX_X = config.janela.width - config.TAMANHO_TILE - PROJETIL_TAMANHO
+    MIN_Y = config.TAMANHO_TILE
+    MAX_Y = config.janela.height - config.TAMANHO_TILE - PROJETIL_TAMANHO
+
+    acertou_jogador = False
+    ativos = []
+
+    for proj in projeteis:
+        proj.x += proj.vel_x * delta
+        proj.y += proj.vel_y * delta
+
+        if proj.x <= MIN_X or proj.x >= MAX_X:
+            proj.vel_x *= -1
+            proj.x = max(MIN_X, min(proj.x, MAX_X))
+
+        if proj.y <= MIN_Y or proj.y >= MAX_Y:
+            proj.vel_y *= -1
+            proj.y = max(MIN_Y, min(proj.y, MAX_Y))
+
+        if proj.collided(personagem):
+            acertou_jogador = True
+        else:
+            ativos.append(proj)
+
+    projeteis = ativos
+    return acertou_jogador
+
 
 # --- Variáveis de Estado do Jogo ---
 sala_atual = 0
@@ -12,11 +168,14 @@ estado_salas = ["lutando" for _ in maps.mapas]
 estado_salas[0] = "liberada"
 
 jogo_vencido = False
+jogador_morto = False
 direcao = "right"
 ataque_ativo = False
 ataque_timer = 0
+recarga_timer = 0
+RECARGA_DURACAO = 0.5
+tiro_timer = 0
 
-# Variável global para controlar a música de fundo
 musica_fundo = None
 
 
@@ -27,11 +186,10 @@ def abrir_porta_da_sala(idx):
         maps.mapas[idx][l][c] = 2
 
 
-# Inicializa a porta da sala 0
 abrir_porta_da_sala(0)
 
 if estado_salas[sala_atual] == "lutando":
-    inimigos = entities.gerar_inimigos_para_sala(mapa)
+    inimigos = gerar_inimigos_para_sala(mapa)
 else:
     inimigos = []
 
@@ -44,43 +202,74 @@ def trocar_sala(novo_index, entrar_pela_esquerda):
     ataque_ativo = False
 
     if estado_salas[sala_atual] == "lutando":
-        inimigos = entities.gerar_inimigos_para_sala(mapa)
+        inimigos = gerar_inimigos_para_sala(mapa)
     else:
         inimigos = []
 
     if entrar_pela_esquerda:
-        entities.personagem.x = config.TAMANHO_TILE * 1.2
+        personagem.x = config.TAMANHO_TILE * 1.2
     else:
-        entities.personagem.x = config.janela.width - config.TAMANHO_TILE * 2.2
+        personagem.x = config.janela.width - config.TAMANHO_TILE * 2.2
 
-    entities.personagem.y = max(0, min(entities.personagem.y, config.janela.height - entities.personagem.height))
+    personagem.y = max(0, min(personagem.y, config.janela.height - personagem.height))
 
 
 def posicionar_espada():
-    cx = entities.personagem.x + entities.personagem.width / 2
-    cy = entities.personagem.y + entities.personagem.height / 2
+    cx = personagem.x + personagem.width / 2
+    cy = personagem.y + personagem.height / 2
 
     if direcao == "right":
-        entities.espada.x = entities.personagem.x + entities.personagem.width
-        entities.espada.y = cy - entities.ESPADA_H / 2
+        espada.x = personagem.x + personagem.width
+        espada.y = cy - ESPADA_H / 2
     elif direcao == "left":
-        entities.espada.x = entities.personagem.x - entities.ESPADA_W
-        entities.espada.y = cy - entities.ESPADA_H / 2
+        espada.x = personagem.x - ESPADA_W
+        espada.y = cy - ESPADA_H / 2
     elif direcao == "down":
-        entities.espada.x = cx - entities.ESPADA_W / 2
-        entities.espada.y = entities.personagem.y + entities.personagem.height
+        espada.x = cx - ESPADA_W / 2
+        espada.y = personagem.y + personagem.height
     elif direcao == "up":
-        entities.espada.x = cx - entities.ESPADA_W / 2
-        entities.espada.y = entities.personagem.y - entities.ESPADA_H
+        espada.x = cx - ESPADA_W / 2
+        espada.y = personagem.y - ESPADA_H
 
-    entities.espada.x = max(0, min(entities.espada.x, config.janela.width - entities.ESPADA_W))
-    entities.espada.y = max(0, min(entities.espada.y, config.janela.height - entities.ESPADA_H))
+    espada.x = max(0, min(espada.x, config.janela.width - ESPADA_W))
+    espada.y = max(0, min(espada.y, config.janela.height - ESPADA_H))
 
 
 def jogar():
-    global direcao, ataque_ativo, ataque_timer, jogo_vencido, inimigos, mapa, musica_fundo
+    global direcao, ataque_ativo, ataque_timer, recarga_timer, tiro_timer
+    global jogador_morto, jogo_vencido, inimigos, mapa, musica_fundo
+    global sala_atual, estado_salas, projeteis
 
-    # Inicia a música da primeira fase em loop
+    # Reset completo do estado do jogo
+    sala_atual = 0
+    mapa = maps.mapas[sala_atual]
+    estado_salas[:] = ["lutando" for _ in maps.mapas]
+    estado_salas[0] = "liberada"
+
+    # Reinicia as portas nos mapas
+    for idx, porta in enumerate(maps.PORTAS_SAIDA):
+        if porta is not None:
+            l, c = porta
+            maps.mapas[idx][l][c] = 1
+    abrir_porta_da_sala(0)
+
+    if estado_salas[sala_atual] == "lutando":
+        inimigos = gerar_inimigos_para_sala(mapa)
+    else:
+        inimigos = []
+    projeteis.clear()
+
+    personagem.x = config.janela.width / 2 - personagem.width / 2
+    personagem.y = config.janela.height / 2 - personagem.height / 2
+
+    direcao = "right"
+    ataque_ativo = False
+    ataque_timer = 0
+    recarga_timer = 0
+    tiro_timer = 0
+    jogador_morto = False
+    jogo_vencido = False
+
     musica_fundo = Sound("AUDIO/fase_01.mp3")
     musica_fundo.play()
 
@@ -88,7 +277,7 @@ def jogar():
         delta = config.janela.delta_time()
 
         if config.janela.keyboard.key_pressed("esc"):
-            musica_fundo.stop()  # Para a música caso saia para o menu
+            musica_fundo.stop()
             break
 
         if jogo_vencido:
@@ -98,61 +287,72 @@ def jogar():
             config.janela.update()
             continue
 
+        if jogador_morto:
+            config.janela.set_background_color((60, 10, 10))
+            config.janela.draw_text("VOCE MORREU!", 330, 270, size=36, color=(255, 60, 60))
+            config.janela.draw_text("Pressione ESC para sair", 400, 320, size=18, color=(255, 255, 255))
+            config.janela.update()
+            continue
+
         # --- Movimento Eixo X ---
-        antigo_x = entities.personagem.x
+        antigo_x = personagem.x
         if config.janela.keyboard.key_pressed("left"):
-            entities.personagem.x -= config.VELOCIDADE * delta
+            personagem.x -= config.VELOCIDADE * delta
             direcao = "left"
         if config.janela.keyboard.key_pressed("right"):
-            entities.personagem.x += config.VELOCIDADE * delta
+            personagem.x += config.VELOCIDADE * delta
             direcao = "right"
 
         for linha_idx, linha in enumerate(mapa):
             for coluna_idx, tile in enumerate(linha):
                 if tile == 1:
-                    entities.floor.x = coluna_idx * config.TAMANHO_TILE
-                    entities.floor.y = linha_idx * config.TAMANHO_TILE
-                    if entities.personagem.collided(entities.floor):
-                        entities.personagem.x = antigo_x
+                    floor.x = coluna_idx * config.TAMANHO_TILE
+                    floor.y = linha_idx * config.TAMANHO_TILE
+                    if personagem.collided(floor):
+                        personagem.x = antigo_x
 
         # --- Movimento Eixo Y ---
-        antigo_y = entities.personagem.y
+        antigo_y = personagem.y
         if config.janela.keyboard.key_pressed("up"):
-            entities.personagem.y -= config.VELOCIDADE * delta
+            personagem.y -= config.VELOCIDADE * delta
             direcao = "up"
         if config.janela.keyboard.key_pressed("down"):
-            entities.personagem.y += config.VELOCIDADE * delta
+            personagem.y += config.VELOCIDADE * delta
             direcao = "down"
 
         for linha_idx, linha in enumerate(mapa):
             for coluna_idx, tile in enumerate(linha):
                 if tile == 1:
-                    entities.floor.x = coluna_idx * config.TAMANHO_TILE
-                    entities.floor.y = linha_idx * config.TAMANHO_TILE
-                    if entities.personagem.collided(entities.floor):
-                        entities.personagem.y = antigo_y
+                    floor.x = coluna_idx * config.TAMANHO_TILE
+                    floor.y = linha_idx * config.TAMANHO_TILE
+                    if personagem.collided(floor):
+                        personagem.y = antigo_y
 
-        entities.personagem.x = max(0, min(entities.personagem.x, config.janela.width - entities.personagem.width))
-        entities.personagem.y = max(0, min(entities.personagem.y, config.janela.height - entities.personagem.height))
+        personagem.x = max(0, min(personagem.x, config.janela.width - personagem.width))
+        personagem.y = max(0, min(personagem.y, config.janela.height - personagem.height))
 
         # --- Portas e Troca de Sala ---
         for linha_idx, linha in enumerate(mapa):
             for coluna_idx, tile in enumerate(linha):
                 if tile == 2 and sala_atual + 1 < len(maps.mapas):
-                    entities.porta_sprite.x = coluna_idx * config.TAMANHO_TILE
-                    entities.porta_sprite.y = linha_idx * config.TAMANHO_TILE
-                    if entities.personagem.collided(entities.porta_sprite):
+                    porta_sprite.x = coluna_idx * config.TAMANHO_TILE
+                    porta_sprite.y = linha_idx * config.TAMANHO_TILE
+                    if personagem.collided(porta_sprite):
                         trocar_sala(sala_atual + 1, entrar_pela_esquerda=True)
                 elif tile == 3 and sala_atual - 1 >= 0:
-                    entities.porta_sprite.x = coluna_idx * config.TAMANHO_TILE
-                    entities.porta_sprite.y = linha_idx * config.TAMANHO_TILE
-                    if entities.personagem.collided(entities.porta_sprite):
+                    porta_sprite.x = coluna_idx * config.TAMANHO_TILE
+                    porta_sprite.y = linha_idx * config.TAMANHO_TILE
+                    if personagem.collided(porta_sprite):
                         trocar_sala(sala_atual - 1, entrar_pela_esquerda=False)
 
         # --- Sistema de Ataque ---
-        if config.janela.keyboard.key_pressed("space") and not ataque_ativo:
+        if recarga_timer > 0:
+            recarga_timer -= delta
+
+        if config.janela.keyboard.key_pressed("space") and not ataque_ativo and recarga_timer <= 0:
             ataque_ativo = True
             ataque_timer = config.ATAQUE_DURACAO
+            recarga_timer = RECARGA_DURACAO
             posicionar_espada()
 
         if ataque_ativo:
@@ -161,8 +361,10 @@ def jogar():
 
             inimigos_vivos = []
             for inimigo in inimigos:
-                if entities.espada.collided(inimigo):
-                    inimigo.vida -= 1
+                if espada.collided(inimigo):
+                    if not hasattr(inimigo, 'inv_timer') or inimigo.inv_timer <= 0:
+                        inimigo.vida -= 1
+                        inimigo.inv_timer = 1.0
                     if inimigo.vida > 0:
                         inimigos_vivos.append(inimigo)
                 else:
@@ -172,14 +374,22 @@ def jogar():
             if ataque_timer <= 0:
                 ataque_ativo = False
 
+        # Conta o timer de invulnerabilidade de cada inimigo
+        for inimigo in inimigos:
+            if hasattr(inimigo, 'inv_timer') and inimigo.inv_timer > 0:
+                inimigo.inv_timer -= delta
+
         # --- Estados das Salas e Derrota de Boss ---
         if estado_salas[sala_atual] == "lutando" and len(inimigos) == 0:
             estado_salas[sala_atual] = "chefe"
-            inimigos = [entities.criar_chefe(mapa, sala_atual)]
+            inimigos = [criar_chefe(mapa, sala_atual)]
+            tiro_timer = INTERVALO_TIRO
+            projeteis.clear()
 
         elif estado_salas[sala_atual] == "chefe" and len(inimigos) == 0:
+            projeteis.clear()
             estado_salas[sala_atual] = "liberada"
-            # SE FOR O PRIMEIRO BOSS (SALA_ATUAL == 1), TROCA A MÚSICA
+
             if sala_atual == 1:
                 writeFile("poc_veloc")
                 musica_fundo.stop()
@@ -200,32 +410,57 @@ def jogar():
             else:
                 abrir_porta_da_sala(sala_atual)
 
-        # --- Renderização (Refresh) ---
+        # --- Movimento e Tiro do Chefe ---
+        if estado_salas[sala_atual] == "chefe" and inimigos:
+            chefe = inimigos[0]
+            atualizar_chefe(chefe, delta)
+
+            tiro_timer -= delta
+            if tiro_timer <= 0:
+                tiro_timer = INTERVALO_TIRO
+                dx = personagem.x - chefe.x
+                dy = personagem.y - chefe.y
+                dist = max((dx**2 + dy**2) ** 0.5, 1)
+                projeteis.append(criar_projetil(
+                    chefe.x + chefe.width / 2,
+                    chefe.y + chefe.height / 2,
+                    dx / dist,
+                    dy / dist
+                ))
+
+        # --- Atualizar Projéteis ---
+        if atualizar_projeteis(delta):
+            jogador_morto = True
+
+        # --- Renderização ---
         config.janela.set_background_color((40, 40, 40))
 
         for linha_idx, linha in enumerate(mapa):
             for coluna_idx, tile in enumerate(linha):
                 if tile == 1:
-                    entities.floor.x = coluna_idx * config.TAMANHO_TILE
-                    entities.floor.y = linha_idx * config.TAMANHO_TILE
-                    entities.floor.draw()
+                    floor.x = coluna_idx * config.TAMANHO_TILE
+                    floor.y = linha_idx * config.TAMANHO_TILE
+                    floor.draw()
                 elif tile in (2, 3):
-                    entities.porta_sprite.x = coluna_idx * config.TAMANHO_TILE
-                    entities.porta_sprite.y = linha_idx * config.TAMANHO_TILE
-                    entities.porta_sprite.draw()
+                    porta_sprite.x = coluna_idx * config.TAMANHO_TILE
+                    porta_sprite.y = linha_idx * config.TAMANHO_TILE
+                    porta_sprite.draw()
 
         for inimigo in inimigos:
             inimigo.draw()
 
-        entities.personagem.draw()
+        personagem.draw()
 
         if ataque_ativo:
-            if (entities.espada.x >= 0 and entities.espada.y >= 0 and
-                entities.espada.x + entities.ESPADA_W <= config.janela.width and
-                entities.espada.y + entities.ESPADA_H <= config.janela.height):
-                entities.espada.draw()
+            if (espada.x >= 0 and espada.y >= 0 and
+                espada.x + ESPADA_W <= config.janela.width and
+                espada.y + ESPADA_H <= config.janela.height):
+                espada.draw()
 
-        # --- Interface (HUD) ---
+        for proj in projeteis:
+            proj.draw()
+
+        # --- HUD ---
         if estado_salas[sala_atual] == "lutando":
             config.janela.draw_text(f"Inimigos restantes: {len(inimigos)}", 10, 10, size=16, color=(255, 255, 255))
         elif estado_salas[sala_atual] == "chefe":
@@ -235,7 +470,3 @@ def jogar():
             config.janela.draw_text("Sala liberada!", 10, 10, size=16, color=(120, 255, 120))
 
         config.janela.update()
-
-
-if __name__ == "__main__":
-    jogar()

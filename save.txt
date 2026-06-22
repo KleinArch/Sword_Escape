@@ -1,0 +1,3 @@
+poc_veloc
+poc_cura
+poc_forca
