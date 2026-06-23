@@ -1,2 +1,2 @@
 # Sword_Escape
-https://studio.youtube.com/video/j7XCgpK2FnA/edit
+https://www.youtube.com/watch?v=j7XCgpK2FnA
