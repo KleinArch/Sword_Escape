@@ -108,10 +108,8 @@ def criar_projetil(x, y, dir_x, dir_y):
     proj.vel_x = dir_x * PROJETIL_VELOCIDADE
     proj.vel_y = dir_y * PROJETIL_VELOCIDADE
     return proj
-
-
-def atualizar_chefe(chefe, delta):
-    """Move o chefe em direção ao jogador."""
+def atualizar_chefe(chefe, delta, mapa_atual):
+    """Move o chefe em direção ao jogador respeitando as paredes."""
     cx = personagem.x + personagem.width / 2
     cy = personagem.y + personagem.height / 2
     bx = chefe.x + chefe.width / 2
@@ -123,15 +121,34 @@ def atualizar_chefe(chefe, delta):
 
     vel_chefe = 80  # pixels por segundo
 
+    # Movimento e colisão no Eixo X
+    antigo_x = chefe.x
     chefe.x += (dx / dist) * vel_chefe * delta
-    chefe.y += (dy / dist) * vel_chefe * delta
+    for linha_idx, linha in enumerate(mapa_atual):
+        for coluna_idx, tile in enumerate(linha):
+            if tile == 1:
+                floor.x = coluna_idx * config.TAMANHO_TILE
+                floor.y = linha_idx * config.TAMANHO_TILE
+                if chefe.collided(floor):
+                    chefe.x = antigo_x
 
-    # Mantém dentro dos limites da janela (respeitando as paredes)
+    # Movimento e colisão no Eixo Y
+    antigo_y = chefe.y
+    chefe.y += (dy / dist) * vel_chefe * delta
+    for linha_idx, linha in enumerate(mapa_atual):
+        for coluna_idx, tile in enumerate(linha):
+            if tile == 1:
+                floor.x = coluna_idx * config.TAMANHO_TILE
+                floor.y = linha_idx * config.TAMANHO_TILE
+                if chefe.collided(floor):
+                    chefe.y = antigo_y
+
+    # Mantém dentro dos limites da janela (respeitando as paredes externas)
     chefe.x = max(config.TAMANHO_TILE, min(chefe.x, config.janela.width - chefe.width - config.TAMANHO_TILE))
     chefe.y = max(config.TAMANHO_TILE, min(chefe.y, config.janela.height - chefe.height - config.TAMANHO_TILE))
 
 
-def atualizar_projeteis(delta):
+def atualizar_projeteis(delta, mapa_atual):
     """Move os projéteis, faz ricochete nas paredes e detecta colisão com o jogador.
     Retorna True se algum projétil acertou o jogador."""
     global projeteis
@@ -145,17 +162,54 @@ def atualizar_projeteis(delta):
     ativos = []
 
     for proj in projeteis:
+        # --- Eixo X ---
+        antigo_x = proj.x
         proj.x += proj.vel_x * delta
-        proj.y += proj.vel_y * delta
 
-        # Ricochete nas paredes
+        # Ricochete nas bordas externas X
         if proj.x <= MIN_X or proj.x >= MAX_X:
             proj.vel_x *= -1
             proj.x = max(MIN_X, min(proj.x, MAX_X))
+        # Ricochete nas paredes internas X
+        colidiu_x = False
+        for linha_idx, linha in enumerate(mapa_atual):
+            for coluna_idx, tile in enumerate(linha):
+                if tile == 1:
+                    floor.x = coluna_idx * config.TAMANHO_TILE
+                    floor.y = linha_idx * config.TAMANHO_TILE
+                    if proj.collided(floor):
+                        colidiu_x = True
+                        break
+            if colidiu_x:
+                break
+        if colidiu_x:
+            proj.vel_x *= -1
+            proj.x = antigo_x
 
+        # --- Eixo Y ---
+        antigo_y = proj.y
+        proj.y += proj.vel_y * delta
+
+        # Ricochete nas bordas externas Y
         if proj.y <= MIN_Y or proj.y >= MAX_Y:
             proj.vel_y *= -1
             proj.y = max(MIN_Y, min(proj.y, MAX_Y))
+
+        # Ricochete nas paredes internas Y
+        colidiu_y = False
+        for linha_idx, linha in enumerate(mapa_atual):
+            for coluna_idx, tile in enumerate(linha):
+                if tile == 1:
+                    floor.x = coluna_idx * config.TAMANHO_TILE
+                    floor.y = linha_idx * config.TAMANHO_TILE
+                    if proj.collided(floor):
+                        colidiu_y = True
+                        break
+            if colidiu_y:
+                break
+        if colidiu_y:
+            proj.vel_y *= -1
+            proj.y = antigo_y
 
         # Colisão com o jogador
         if proj.collided(personagem):
